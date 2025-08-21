@@ -13,6 +13,7 @@ interface FileEntry {
   is_directory: boolean;
   size?: number;
   extension?: string;
+  git_status?: string;
 }
 
 interface FileTreeProps {

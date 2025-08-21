@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::Path;
+use std::process::Command;
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use pdf_extract::extract_text;
@@ -13,6 +15,17 @@ pub struct FileEntry {
     pub is_directory: bool,
     pub size: Option<u64>,
     pub extension: Option<String>,
+    pub git_status: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GitStatus {
+    pub staged: Vec<String>,
+    pub modified: Vec<String>,
+    pub untracked: Vec<String>,
+    pub deleted: Vec<String>,
+    pub renamed: Vec<String>,
+    pub conflicted: Vec<String>,
 }
 
 #[tauri::command]
@@ -63,6 +76,7 @@ pub async fn read_directory(path: String) -> Result<Vec<FileEntry>, String> {
                             is_directory,
                             size,
                             extension,
+                            git_status: None,
                         });
                     }
                     Err(_) => continue,
@@ -80,6 +94,14 @@ pub async fn read_directory(path: String) -> Result<Vec<FileEntry>, String> {
             _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
         }
     });
+    
+    // Get git status for this directory
+    let git_status_map = get_git_status_for_directory(&expanded_path).unwrap_or_default();
+    
+    // Update entries with git status
+    for entry in &mut entries {
+        entry.git_status = git_status_map.get(&entry.path).cloned();
+    }
     
     Ok(entries)
 }
@@ -351,4 +373,284 @@ pub async fn calculate_file_tokens(file_path: String) -> Result<Option<u32>, Str
         }
         Err(_) => Ok(None),
     }
+}
+
+fn get_git_status_for_directory(dir_path: &Path) -> Result<HashMap<String, String>, String> {
+    let mut git_status_map = HashMap::new();
+    
+    // Check if directory is in a git repository
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(dir_path)
+        .output();
+    
+    match output {
+        Ok(output) => {
+            if !output.status.success() {
+                return Ok(git_status_map); // Not a git repo or error
+            }
+            
+            let status_output = String::from_utf8_lossy(&output.stdout);
+            for line in status_output.lines() {
+                if line.len() < 3 {
+                    continue;
+                }
+                
+                let status_code = &line[..2];
+                let file_path = &line[3..];
+                let full_path = dir_path.join(file_path).to_string_lossy().to_string();
+                
+                let status = match status_code {
+                    "??" => "untracked",
+                    "A " => "added",
+                    "AM" => "added-modified",
+                    " M" => "modified",
+                    "M " => "staged",
+                    "MM" => "modified-staged",
+                    " D" => "deleted",
+                    "D " => "staged-deleted",
+                    "R " => "renamed",
+                    "C " => "copied",
+                    "UU" => "conflicted",
+                    _ => "unknown",
+                };
+                
+                git_status_map.insert(full_path, status.to_string());
+            }
+        }
+        Err(_) => return Ok(git_status_map),
+    }
+    
+    Ok(git_status_map)
+}
+
+#[tauri::command]
+pub async fn get_git_status(directory: String) -> Result<GitStatus, String> {
+    let expanded_path = if directory.starts_with("~/") {
+        let home = dirs::home_dir()
+            .ok_or_else(|| "Cannot find home directory".to_string())?;
+        home.join(&directory[2..])
+    } else {
+        Path::new(&directory).to_path_buf()
+    };
+    
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&expanded_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git command: {}", e))?;
+    
+    if !output.status.success() {
+        return Err("Not a git repository or git command failed".to_string());
+    }
+    
+    let mut git_status = GitStatus {
+        staged: Vec::new(),
+        modified: Vec::new(),
+        untracked: Vec::new(),
+        deleted: Vec::new(),
+        renamed: Vec::new(),
+        conflicted: Vec::new(),
+    };
+    
+    let status_output = String::from_utf8_lossy(&output.stdout);
+    for line in status_output.lines() {
+        if line.len() < 3 {
+            continue;
+        }
+        
+        let status_code = &line[..2];
+        let file_path = line[3..].to_string();
+        
+        match status_code {
+            "??" => git_status.untracked.push(file_path),
+            "A " | "AM" => git_status.staged.push(file_path),
+            "M " => git_status.staged.push(file_path),
+            " M" => git_status.modified.push(file_path),
+            "MM" => git_status.modified.push(file_path),
+            " D" => git_status.deleted.push(file_path),
+            "D " => git_status.staged.push(file_path),
+            "R " | "RM" => git_status.renamed.push(file_path),
+            "UU" => git_status.conflicted.push(file_path),
+            _ => {}
+        }
+    }
+    
+    Ok(git_status)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiffLine {
+    pub line_number_old: Option<u32>,
+    pub line_number_new: Option<u32>,
+    pub content: String,
+    pub line_type: String, // "context", "added", "removed", "header"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileDiff {
+    pub file_path: String,
+    pub old_path: Option<String>,
+    pub new_path: Option<String>,
+    pub lines: Vec<DiffLine>,
+    pub is_binary: bool,
+    pub is_new_file: bool,
+    pub is_deleted_file: bool,
+}
+
+#[tauri::command]
+pub async fn get_git_diff(directory: String, file_path: Option<String>) -> Result<Vec<FileDiff>, String> {
+    let expanded_path = if directory.starts_with("~/") {
+        let home = dirs::home_dir()
+            .ok_or_else(|| "Cannot find home directory".to_string())?;
+        home.join(&directory[2..])
+    } else {
+        Path::new(&directory).to_path_buf()
+    };
+    
+    let mut args = vec!["diff", "--no-color"];
+    if let Some(file) = &file_path {
+        args.push("--");
+        args.push(file);
+    }
+    
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(&expanded_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git diff command: {}", e))?;
+    
+    if !output.status.success() {
+        return Err("Git diff command failed".to_string());
+    }
+    
+    let diff_output = String::from_utf8_lossy(&output.stdout);
+    let diffs = parse_git_diff(&diff_output);
+    
+    Ok(diffs)
+}
+
+fn parse_git_diff(diff_output: &str) -> Vec<FileDiff> {
+    let mut diffs = Vec::new();
+    let lines: Vec<&str> = diff_output.lines().collect();
+    let mut i = 0;
+    
+    while i < lines.len() {
+        let line = lines[i];
+        
+        // Look for diff header
+        if line.starts_with("diff --git") {
+            let mut file_diff = FileDiff {
+                file_path: String::new(),
+                old_path: None,
+                new_path: None,
+                lines: Vec::new(),
+                is_binary: false,
+                is_new_file: false,
+                is_deleted_file: false,
+            };
+            
+            // Parse file paths from diff header
+            if let Some(paths) = line.strip_prefix("diff --git ") {
+                let parts: Vec<&str> = paths.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    file_diff.old_path = Some(parts[0].strip_prefix("a/").unwrap_or(parts[0]).to_string());
+                    file_diff.new_path = Some(parts[1].strip_prefix("b/").unwrap_or(parts[1]).to_string());
+                    file_diff.file_path = parts[1].strip_prefix("b/").unwrap_or(parts[1]).to_string();
+                }
+            }
+            
+            i += 1;
+            
+            // Parse metadata lines
+            while i < lines.len() && !lines[i].starts_with("@@") && !lines[i].starts_with("diff --git") {
+                let meta_line = lines[i];
+                
+                if meta_line.starts_with("new file mode") {
+                    file_diff.is_new_file = true;
+                } else if meta_line.starts_with("deleted file mode") {
+                    file_diff.is_deleted_file = true;
+                } else if meta_line.contains("Binary files") {
+                    file_diff.is_binary = true;
+                }
+                
+                i += 1;
+            }
+            
+            // Parse hunks
+            while i < lines.len() && lines[i].starts_with("@@") {
+                let hunk_header = lines[i];
+                file_diff.lines.push(DiffLine {
+                    line_number_old: None,
+                    line_number_new: None,
+                    content: hunk_header.to_string(),
+                    line_type: "header".to_string(),
+                });
+                
+                // Parse line numbers from hunk header
+                let mut old_line_num = 1u32;
+                let mut new_line_num = 1u32;
+                
+                if let Some(numbers) = hunk_header.strip_prefix("@@").and_then(|s| s.strip_suffix("@@")) {
+                    if let Some((old_part, new_part)) = numbers.trim().split_once(' ') {
+                        if let Some(old_start) = old_part.strip_prefix("-").and_then(|s| s.split(',').next()).and_then(|s| s.parse().ok()) {
+                            old_line_num = old_start;
+                        }
+                        if let Some(new_start) = new_part.strip_prefix("+").and_then(|s| s.split(',').next()).and_then(|s| s.parse().ok()) {
+                            new_line_num = new_start;
+                        }
+                    }
+                }
+                
+                i += 1;
+                
+                // Parse hunk content
+                while i < lines.len() && !lines[i].starts_with("@@") && !lines[i].starts_with("diff --git") {
+                    let content_line = lines[i];
+                    
+                    if content_line.is_empty() {
+                        break;
+                    }
+                    
+                    let (line_type, old_num, new_num) = match content_line.chars().next() {
+                        Some('+') => {
+                            let result = ("added", None, Some(new_line_num));
+                            new_line_num += 1;
+                            result
+                        },
+                        Some('-') => {
+                            let result = ("removed", Some(old_line_num), None);
+                            old_line_num += 1;
+                            result
+                        },
+                        Some(' ') => {
+                            let result = ("context", Some(old_line_num), Some(new_line_num));
+                            old_line_num += 1;
+                            new_line_num += 1;
+                            result
+                        },
+                        _ => {
+                            i += 1;
+                            continue;
+                        }
+                    };
+                    
+                    file_diff.lines.push(DiffLine {
+                        line_number_old: old_num,
+                        line_number_new: new_num,
+                        content: content_line.to_string(),
+                        line_type: line_type.to_string(),
+                    });
+                    
+                    i += 1;
+                }
+            }
+            
+            diffs.push(file_diff);
+        } else {
+            i += 1;
+        }
+    }
+    
+    diffs
 }

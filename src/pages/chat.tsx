@@ -10,10 +10,12 @@ import {
 import { NoteList, NoteEditor } from "@/components/notes";
 import { FileTree } from "@/components/FileTree";
 import { FileViewer } from "@/components/FileTree/FileViewer";
+import { GitStatusView } from "@/components/FileTree/GitStatusView";
+import { DiffViewer } from "@/components/FileTree/DiffViewer";
 import { useFolderStore } from "@/hooks/useFolderStore";
 import { useLayoutStore } from "@/hooks/useLayoutStore";
 import { useNoteStore } from "@/hooks/useNoteStore";
-import { History, Plus, FileText, MessageCircle } from "lucide-react";
+import { History, Plus, FileText, MessageCircle, Folder, GitBranch } from "lucide-react";
 import { useConversationStore } from "@/hooks/useConversationStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -25,10 +27,12 @@ export default function ChatPage() {
   const { currentFolder } = useFolderStore();
   const { showChatPane, showFileTree } = useLayoutStore();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"file" | "diff">("file");
   const [chatPaneWidth, setChatPaneWidth] = useState(600); // Wider to accommodate conversation list
   const [conversationListWidth, setConversationListWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<"conversation" | "notes">("conversation");
+  const [leftPanelTab, setLeftPanelTab] = useState<"files" | "git">("files");
   const [noteListWidth, setNoteListWidth] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -45,10 +49,17 @@ export default function ChatPage() {
 
   const handleFileClick = (filePath: string) => {
     setSelectedFile(filePath);
+    setViewMode("file");
+  };
+
+  const handleDiffClick = (filePath: string) => {
+    setSelectedFile(filePath);
+    setViewMode("diff");
   };
 
   const handleCloseFile = () => {
     setSelectedFile(null);
+    setViewMode("file");
   };
 
   const { createNoteFromContent, setCurrentNote } = useNoteStore();
@@ -107,15 +118,45 @@ export default function ChatPage() {
       <div className="flex h-full">
         {showFileTree && (
           <div className="w-80 border-r border-gray-200 flex-shrink-0">
-            <FileTree
-              currentFolder={currentFolder || undefined}
-              onFileClick={handleFileClick}
-            />
+            <Tabs value={leftPanelTab} onValueChange={(value) => setLeftPanelTab(value as "files" | "git")} className="flex flex-col h-full">
+              <div className="flex-shrink-0 px-3 py-2 border-b border-gray-200">
+                <TabsList className="grid grid-cols-2 w-full">
+                  <TabsTrigger value="files" className="text-sm">
+                    <Folder size={14} className="mr-1.5" />
+                    Files
+                  </TabsTrigger>
+                  <TabsTrigger value="git" className="text-sm">
+                    <GitBranch size={14} className="mr-1.5" />
+                    Git
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="files" className="flex-1 min-h-0 mt-0">
+                <FileTree
+                  currentFolder={currentFolder || undefined}
+                  onFileClick={handleFileClick}
+                />
+              </TabsContent>
+              <TabsContent value="git" className="flex-1 min-h-0 mt-0">
+                <GitStatusView
+                  currentFolder={currentFolder || undefined}
+                  onDiffClick={handleDiffClick}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         )}
         <div className="flex-1 min-w-0 overflow-hidden">
           {selectedFile ? (
-            <FileViewer filePath={selectedFile} onClose={handleCloseFile} addToNotepad={addToNote} />
+            viewMode === "diff" ? (
+              <DiffViewer 
+                filePath={selectedFile} 
+                currentFolder={currentFolder || ""} 
+                onClose={handleCloseFile} 
+              />
+            ) : (
+              <FileViewer filePath={selectedFile} onClose={handleCloseFile} addToNotepad={addToNote} />
+            )
           ) : (
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="text-center space-y-4 max-w-md">

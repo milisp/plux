@@ -16,12 +16,37 @@ import {
 import { getFileIcon } from "./fileIcons";
 import { SubFolderContent } from "./SubFolderContent";
 
+const getGitStatusIcon = (status: string) => {
+  const iconClass = "w-3 h-3 ml-1";
+  switch (status) {
+    case "untracked":
+      return <span className={`${iconClass} text-green-500`} title="Untracked">?</span>;
+    case "modified":
+      return <span className={`${iconClass} text-yellow-500`} title="Modified">M</span>;
+    case "staged":
+      return <span className={`${iconClass} text-green-600`} title="Staged">A</span>;
+    case "added":
+      return <span className={`${iconClass} text-green-600`} title="Added">A</span>;
+    case "deleted":
+      return <span className={`${iconClass} text-red-500`} title="Deleted">D</span>;
+    case "renamed":
+      return <span className={`${iconClass} text-blue-500`} title="Renamed">R</span>;
+    case "conflicted":
+      return <span className={`${iconClass} text-red-700`} title="Conflicted">C</span>;
+    case "modified-staged":
+      return <span className={`${iconClass} text-orange-500`} title="Modified & Staged">M</span>;
+    default:
+      return null;
+  }
+};
+
 interface FileEntry {
   name: string;
   path: string;
   is_directory: boolean;
   size?: number;
   extension?: string;
+  git_status?: string;
 }
 
 interface FileTreeItemProps {
@@ -84,6 +109,7 @@ export function FileTreeItem({
         )}
 
         {getFileIcon(entry)}
+        {entry.git_status && getGitStatusIcon(entry.git_status)}
 
         <span
           className="flex-1 text-sm cursor-pointer hover:text-blue-600"
