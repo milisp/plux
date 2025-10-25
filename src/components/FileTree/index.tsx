@@ -63,7 +63,6 @@ export function FileTree({
     }
   };
 
-
   const toggleFolder = async (folderPath: string) => {
     const newExpanded = new Set(expandedFolders);
     if (expandedFolders.has(folderPath)) {

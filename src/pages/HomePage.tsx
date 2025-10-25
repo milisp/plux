@@ -28,11 +28,15 @@ export default function HomePage() {
   const { folderHistory, setCurrentFolder } = useFolderStore();
   const { apiKey, selectedProvider } = useProvider();
   const [showAllRecent, setShowAllRecent] = useState(false);
-  
-  const sortedFolders = folderHistory.sort((a, b) => b.lastVisited - a.lastVisited);
-  const recentFolders = showAllRecent ? sortedFolders : sortedFolders.slice(0, 5);
+
+  const sortedFolders = folderHistory.sort(
+    (a, b) => b.lastVisited - a.lastVisited,
+  );
+  const recentFolders = showAllRecent
+    ? sortedFolders
+    : sortedFolders.slice(0, 5);
   const hasMoreFolders = sortedFolders.length > 5;
-  
+
   const hasApiKey = apiKey && apiKey.trim().length > 0;
   const needsSetup = !hasApiKey && selectedProvider !== "ollama";
 
@@ -82,22 +86,23 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
+    <div className="max-w-4xl mx-auto p-2 space-y-4">
       {/* API Key Setup Banner */}
       {needsSetup && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-orange-600" />
+        <Card className="bg-orange-50 gap-2 py-4">
+          <CardHeader className="gap-1 pb-0 px-4">
+            <div className="flex items-center gap-2 pb-0">
+              <AlertCircle className="w-4 h-4 text-orange-600" />
               <CardTitle className="text-orange-900">Setup Required</CardTitle>
             </div>
           </CardHeader>
-          <CardContent>
-            <p className="text-orange-800 mb-4">
-              Please configure your API key to start using Plux. You need an API key for {selectedProvider} to chat with AI models.
+          <CardContent className="m-0">
+            <p className="text-orange-800 mb-1">
+              Please configure your API key to start using Plux. You need an API
+              key for {selectedProvider} to chat with AI models.
             </p>
-            <Button 
-              onClick={() => navigate("/settings")} 
+            <Button
+              onClick={() => navigate("/settings")}
               className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700"
             >
               <Key className="w-4 h-4" />
@@ -169,7 +174,9 @@ export default function HomePage() {
                 onClick={() => setShowAllRecent(!showAllRecent)}
                 className="text-sm text-gray-600 hover:text-gray-900"
               >
-                {showAllRecent ? 'Show Less' : `Show More (${sortedFolders.length - 5} more)`}
+                {showAllRecent
+                  ? "Show Less"
+                  : `Show More (${sortedFolders.length - 5} more)`}
               </Button>
             </div>
           )}

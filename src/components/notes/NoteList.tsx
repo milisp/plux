@@ -2,7 +2,14 @@ import { cn } from "@/lib/utils";
 import { useNoteStore } from "@/hooks/useNoteStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Trash2, Search, Star, StarOff } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Trash2,
+  Search,
+  Star,
+  StarOff,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +28,7 @@ export function NoteList() {
     deleteNote,
     toggleFavorite,
   } = useNoteStore();
-  
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("history");
 
@@ -34,7 +41,7 @@ export function NoteList() {
     e.stopPropagation();
     deleteNote(noteId);
   };
-  
+
   const handleToggleFavorite = (noteId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     toggleFavorite(noteId);
@@ -44,31 +51,35 @@ export function NoteList() {
     const date = new Date(timestamp);
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
     }
   };
-  
+
   const filteredNotes = useMemo(() => {
     let filtered = notes;
-    
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(note => 
-        note.title.toLowerCase().includes(query) ||
-        note.content.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (note) =>
+          note.title.toLowerCase().includes(query) ||
+          note.content.toLowerCase().includes(query),
       );
     }
-    
+
     // Filter by tab
     if (activeTab === "favorites") {
-      filtered = filtered.filter(note => note.isFavorited);
+      filtered = filtered.filter((note) => note.isFavorited);
     }
-    
+
     return filtered;
   }, [notes, searchQuery, activeTab]);
 
@@ -79,7 +90,7 @@ export function NoteList() {
         "group relative p-3 rounded-lg cursor-pointer border transition-all hover:bg-white hover:shadow-sm",
         currentNoteId === note.id
           ? "bg-blue-50 border-blue-200 shadow-sm"
-          : "bg-white border-transparent hover:border-gray-200"
+          : "bg-white border-transparent hover:border-gray-200",
       )}
       onClick={() => setCurrentNote(note.id)}
     >
@@ -102,7 +113,7 @@ export function NoteList() {
             </span>
           </div>
         </div>
-        
+
         {/* Actions */}
         <div className="opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="flex gap-1">
@@ -147,21 +158,9 @@ export function NoteList() {
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b bg-white">
-        <h3 className="text-sm font-medium text-gray-900">Notes</h3>
-        <Button
-          onClick={handleCreateNote}
-          size="sm"
-          className="h-7 w-7 p-0"
-        >
-          <Plus className="h-3 w-3" />
-        </Button>
-      </div>
-
       {/* Search */}
-      <div className="p-3 bg-white border-b">
-        <div className="relative">
+      <div className="bg-white border-b">
+        <div className="flex relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
           <Input
             placeholder="Search notes..."
@@ -169,16 +168,22 @@ export function NoteList() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-8 text-sm"
           />
+          <Button onClick={handleCreateNote} size="sm" className="h-7 w-7">
+            <Plus className="h-3 w-3" />
+          </Button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1">
-        <TabsList className="grid w-full grid-cols-2 mx-3 mt-2">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex flex-col flex-1"
+      >
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="history" className="flex-1 overflow-y-auto mt-0">
           {filteredNotes.length === 0 ? (
             <div className="p-4 text-center text-gray-500 text-sm">
@@ -187,7 +192,9 @@ export function NoteList() {
               ) : notes.length === 0 ? (
                 <>
                   <p>No notes yet</p>
-                  <p className="text-xs mt-1">Create your first note to get started</p>
+                  <p className="text-xs mt-1">
+                    Create your first note to get started
+                  </p>
                 </>
               ) : (
                 <p>No notes to display</p>
@@ -199,7 +206,7 @@ export function NoteList() {
             </div>
           )}
         </TabsContent>
-        
+
         <TabsContent value="favorites" className="flex-1 overflow-y-auto mt-0">
           {filteredNotes.length === 0 ? (
             <div className="p-4 text-center text-gray-500 text-sm">
@@ -208,7 +215,9 @@ export function NoteList() {
               ) : (
                 <>
                   <p>No favorite notes</p>
-                  <p className="text-xs mt-1">Star some notes to see them here</p>
+                  <p className="text-xs mt-1">
+                    Star some notes to see them here
+                  </p>
                 </>
               )}
             </div>
